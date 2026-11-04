@@ -114,5 +114,8 @@ gradle-app.setting
 # Common working directory
 run/
 
+# Local tooling
+tools/
+
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
