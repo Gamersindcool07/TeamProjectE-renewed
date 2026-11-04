@@ -31,8 +31,20 @@ public class KnowledgeEventsProviderMixin {
             index = 0,
             remap = false)
     private static INBTSerializable<CompoundTag> onInit(INBTSerializable<CompoundTag> internal) throws IllegalAccessException {
-        if (Thread.currentThread().getThreadGroup() == SidedThreadGroups.SERVER && internal instanceof KnowledgeImpl.DefaultImpl impl && PLAYER_FIELD.get(impl) instanceof ServerPlayer player)
-            return new TeamKnowledgeProvider(player);
+        // Transmutation table fix: the capability is created once per session at login,
+        // so checking team membership here only covers players already in a team at
+        // login. Create/join/leave mid-session would otherwise never change routing,
+        // leaving the table rendering the player's personal EMC instead of the team's.
+        // Install the dispatcher unconditionally (server side only): it delegates to
+        // the team pool for team members and behaves exactly like vanilla ProjectE for
+        // non-team players (ephemeral, non-persisted, vanilla NBT schema).
+        if (Thread.currentThread().getThreadGroup() == SidedThreadGroups.SERVER && internal instanceof KnowledgeImpl.DefaultImpl impl && PLAYER_FIELD.get(impl) instanceof ServerPlayer player) {
+            try {
+                return new TeamKnowledgeProvider(player);
+            } catch (Exception ignored) {
+                // If provider construction fails, fall through to vanilla.
+            }
+        }
         return internal;
     }
 }

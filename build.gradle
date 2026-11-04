@@ -134,6 +134,7 @@ mixin {
 sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
+    mavenCentral()
     maven {
         url "https://cursemaven.com"
         content {
@@ -152,6 +153,18 @@ dependencies {
     //runtimeOnly fg.deobf('curse.maven:projectex-579177:4099773')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    // Pluggable persistence: SQLite driver bundled for the SQL backend.
+    // MySQL/PostgreSQL drivers can be added to the server mods/libraries path at runtime.
+    implementation 'org.xerial:sqlite-jdbc:3.36.0'
+    implementation files('/root/.gradle/caches/modules-2/files-2.1/com.mojang/brigadier/1.1.8/5244ce82c3337bba4a196a3ce858bfaecc74404a/brigadier-1.1.8.jar')
+}
+
+test {
+    useJUnitPlatform()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
 // Example for how to get properties into the manifest for reading at runtime.
@@ -169,7 +182,28 @@ jar {
     }
 }
 
+// Shade the SQLite JDBC driver into the mod jar so the SQL persistence
+// backend works without external driver files (MySQL/PostgreSQL drivers
+// are still loaded from the server mods/libraries path at runtime).
+jar {
+    from({
+        configurations.runtimeClasspath.filter { it.name.contains('sqlite-jdbc') }.collect { zipTree(it) }
+    }) {
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.DSA'
+        exclude 'META-INF/*.RSA'
+        exclude 'META-INF/*.EC'
+    }
+}
+
 jar.finalizedBy('reobfJar')
+
+tasks.register('checkLang', Exec) {
+    description = 'Verify translatable keys exist in en_us+zh_cn with matching placeholder counts'
+    group = 'verification'
+    commandLine 'python3', "${projectDir}/tools/check_lang.py"
+}
+tasks.named('check') { dependsOn 'checkLang' }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation

@@ -8,9 +8,13 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import cn.leomc.teamprojecte.commands.CommandRegistry;
+import cn.leomc.teamprojecte.persistence.TeamConfig;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import org.slf4j.Logger;
 
@@ -24,17 +28,24 @@ public class TeamProjectE {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public TeamProjectE() {
+        ModLoadingContext.get().registerConfig(net.minecraftforge.fml.config.ModConfig.Type.COMMON, TeamConfig.SPEC, "teamprojecte.toml");
         MinecraftForge.EVENT_BUS.register(this);
     }
 
     @SubscribeEvent
     public void onRegisterCommand(RegisterCommandsEvent event) {
-        TPCommand.register(event.getDispatcher());
+        CommandRegistry.register(event.getDispatcher());
+    }
+
+    @SubscribeEvent
+    public void onServerStarted(ServerStartedEvent event) {
+        // Pluggable persistence: initialise backend + run one-time migration.
+        TPSavedData.initStore();
     }
 
     @SubscribeEvent
     public void onServerStopped(ServerStoppedEvent event) {
-        TPCommand.INVITATIONS.clear();
+        cn.leomc.teamprojecte.commands.CommandBase.clearInvitations();
         TPSavedData.onServerStopped();
     }
 
@@ -45,6 +56,7 @@ public class TeamProjectE {
     }
 
     public static List<ServerPlayer> getAllOnline(List<UUID> uuids) {
+        if (ServerLifecycleHooks.getCurrentServer() == null) return List.of();
         return uuids.stream()
                 .map(uuid -> ServerLifecycleHooks.getCurrentServer().getPlayerList().getPlayer(uuid))
                 .filter(Objects::nonNull)
@@ -52,6 +64,7 @@ public class TeamProjectE {
     }
 
     public static void sync(ServerPlayer player) {
+        // Non-team players: vanilla ProjectE sync only (no team creation).
         player.getCapability(PECapabilities.KNOWLEDGE_CAPABILITY).ifPresent(provider -> provider.sync(player));
     }
 
@@ -60,7 +73,9 @@ public class TeamProjectE {
     }
 
     public static List<ServerPlayer> getOnlineTeamMembers(UUID uuid, boolean includeOwner) {
-        TPTeam team = TPTeam.getOrCreateTeam(uuid);
+        // Requirement 5: never create a team for a non-team player.
+        TPTeam team = TPTeam.getTeamByMember(uuid);
+        if (team == null) return List.of();
         return TeamProjectE.getAllOnline(includeOwner ? team.getAll() : team.getMembers());
     }
 
